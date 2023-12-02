@@ -1,0 +1,230 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: An CloudFormation RDS Aurora MySQL.
+Parameters:
+  stage:
+    Type: String
+    Default: prd
+    AllowedValues:
+      - prd
+      - qa
+      - dev
+  project:
+    Type: String
+  account:
+    Type: String
+  cfBucketName:
+    Type: String
+  templatesFolder:
+    Type: String
+  vpcId:
+    Type: String
+  Subnet01:
+    Type: String
+  Subnet02:
+    Type: String
+  dbName:
+    Type: String
+  DBClusterIdentifier:
+    Type: String
+  dbPort:
+    Type: Number
+    Description: Database port
+    Default: 3407
+  cfBucketNameCode:
+    Type: String
+  accountCloudfront:
+    Type: String
+  distributionId:
+    Type: String
+  DBEngine:
+    Type: String
+    AllowedValues:
+      - aurora-mysql
+      - aurora-postgresql
+      - mysql
+      - postgres
+  rdsInstanceType:
+    Type: String
+    Description: Clase (size) de la base de datos
+    Default: db.t3.large
+    AllowedValues:
+      - db.t3.small
+      - db.t3.medium
+      - db.t3.large
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.12xlarge
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+Resources:
+  DBSecret:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/db-secret.yml
+      Parameters:
+        stage: !Ref stage
+        project: !Ref project
+        dbName: !Ref dbName
+        dbPort: !Ref dbPort
+        DBClusterIdentifier: !Ref DBClusterIdentifier
+        account: !Ref account
+
+  AuroraDBMySQLCluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/auroradb-mysql.yml
+      Parameters:
+        stage: !Ref stage
+        project: !Ref project
+        vpcId: !Ref vpcId
+        dbSubnetsIdList: !Join
+          - ","
+          - - !Ref Subnet01
+            - !Ref Subnet02
+        dbName: !Ref dbName
+        dbPort: !Ref dbPort
+        DBClusterIdentifier: !Ref DBClusterIdentifier
+        DBEngine: !Ref DBEngine
+        rdsInstanceType: !Ref rdsInstanceType
+        dbCredentialsSecretARN: !GetAtt DBSecret.Outputs.DBCredentialsSecretARN
+        account: !Ref account
+
+  DBSecretPolicy:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/resource-policy-secrets.yml
+      Parameters:
+        DBClusterArn: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterArn
+        dbCredentialsSecretARN: !GetAtt DBSecret.Outputs.DBCredentialsSecretARN
+        ARNLambdaBack: !GetAtt DBLambdaBack.Outputs.ARNLambdaBack
+        ARNLambdaBackAuthorizer: !GetAtt DBLambdaBackAuthorizer.Outputs.ARNLambdaBackAuthorizer
+
+  S3Lambdas:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/s3-cloudfront.yml
+      Parameters:
+        accountCloudfront: !Ref accountCloudfront
+        distributionId: !Ref distributionId
+        project: !Ref project
+        account: !Ref account
+
+  DBLambdaBack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/lambda-backend.yml
+      Parameters:
+        stage: !Ref stage
+        project: !Ref project
+        vpcId: !Ref vpcId
+        account: !Ref account
+        cfBucketNameCode: !Ref cfBucketNameCode
+        dbSubnetsIdList: !Join
+          - ","
+          - - !Ref Subnet01
+            - !Ref Subnet02
+        DBClusterSg: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterSg
+
+  DBLambdaBackAuthorizer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/lambda-backenauthorizer.yml
+      Parameters:
+        stage: !Ref stage
+        project: !Ref project
+        vpcId: !Ref vpcId
+        account: !Ref account
+        cfBucketNameCode: !Ref cfBucketNameCode
+        dbSubnetsIdList: !Join
+          - ","
+          - - !Ref Subnet01
+            - !Ref Subnet02
+        DBClusterSg: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterSg
+
+  DBLambdaSMS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/lambda-sms.yml
+      Parameters:
+        stage: !Ref stage
+        project: !Ref project
+        account: !Ref account
+        cfBucketNameCode: !Ref cfBucketNameCode
+
+  DBLambdaAuthorizer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${cfBucketName}/${templatesFolder}/lambda-authorizer.yml
+      Parameters:
+        stage: !Ref stage
+        project: !Ref project
+        account: !Ref account
+        cfBucketNameCode: !Ref cfBucketNameCode
+
+Outputs:
+  DBCredentialsSecretARN:
+    Description: DB Credentials Secret ARN.
+    Value: !GetAtt DBSecret.Outputs.DBCredentialsSecretARN
+    Export:
+      Name: !Sub "${AWS::StackName}-DBCredentialsSecretARN"
+  DBCredentialsSecretName:
+    Description: DB Credentials Secret Name
+    Value: !GetAtt DBSecret.Outputs.DBCredentialsSecretName
+    Export:
+      Name: !Sub "${AWS::StackName}-DBCredentialsSecretName"
+  DBClusterWriteEndpoint:
+    Description: DB Cluster Write Endpoint
+    Value: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterWriteEndpoint
+    Export:
+      Name: !Sub "${AWS::StackName}-DBClusterWriteEndpoint"
+  DBClusterReadEndpoint:
+    Description: DB Cluster Read Endpoint
+    Value: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterReadEndpoint
+    Export:
+      Name: !Sub "${AWS::StackName}-DBClusterReadEndpoint"
+  DBClusterPort:
+    Description: DB Cluster Port
+    Value: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterPort
+    Export:
+      Name: !Sub "${AWS::StackName}-DBClusterPort"
+  DBClusterArn:
+    Value: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterArn
+    Export:
+      Name: !Sub "${AWS::StackName}-DBClusterArn"
+  DBClusterIdentifier:
+    Value:
+      Ref: DBClusterIdentifier
+    Export:
+      Name: !Sub "${AWS::StackName}-DBClusterIdentifier"
+  dbName:
+    Value:
+      Ref: dbName
+    Export:
+      Name: !Sub "${AWS::StackName}-dbName"
+  DBEngine:
+    Value:
+      Ref: DBEngine
+    Export:
+      Name: !Sub "${AWS::StackName}-DBEngine"
+  dbPort:
+    Value:
+      Ref: dbPort
+    Export:
+      Name: !Sub "${AWS::StackName}-dbPort"
+  DBClusterSg:
+    Value: !GetAtt AuroraDBMySQLCluster.Outputs.DBClusterSg
+    Export:
+      Name: !Sub "${AWS::StackName}-DBClusterSg"
+  ARNLambdaBack:
+    Value: !GetAtt DBLambdaBack.Outputs.ARNLambdaBack
+    Export:
+      Name: !Sub "${AWS::StackName}-ARNLambdaBack"
+  ARNLambdaBackAuthorizer:
+    Value: !GetAtt DBLambdaBackAuthorizer.Outputs.ARNLambdaBackAuthorizer
+    Export:
+      Name: !Sub "${AWS::StackName}-ARNLambdaBackAuthorizer"

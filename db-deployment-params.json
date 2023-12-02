@@ -1,0 +1,66 @@
+[
+  {
+    "ParameterKey": "stage",
+    "ParameterValue": "$(stage)"
+  },
+  {
+    "ParameterKey": "project",
+    "ParameterValue": "$(project)"
+  },
+  {
+    "ParameterKey": "cfBucketName",
+    "ParameterValue": "$(cfBucketName)"
+  },
+  {
+    "ParameterKey": "templatesFolder",
+    "ParameterValue": "$(templatesFolder)"
+  },
+  {
+    "ParameterKey": "vpcId",
+    "ParameterValue": "$(vpcId)"
+  },
+  {
+    "ParameterKey": "Subnet01",
+    "ParameterValue": "$(Subnet01)"
+  },
+  {
+    "ParameterKey": "Subnet02",
+    "ParameterValue": "$(Subnet02)"
+  },
+  {
+    "ParameterKey": "dbName",
+    "ParameterValue": "$(dbName)"
+  },
+  {
+    "ParameterKey": "dbPort",
+    "ParameterValue": "$(dbPort)"
+  },
+  {
+    "ParameterKey": "rdsInstanceType",
+    "ParameterValue": "$(rdsInstanceType)"
+  },
+  {
+    "ParameterKey": "DBClusterIdentifier",
+    "ParameterValue": "$(DBClusterIdentifier)"
+  },
+  {
+    "ParameterKey": "DBEngine",
+    "ParameterValue": "$(DBEngine)"
+  },
+  {
+    "ParameterKey": "account",
+    "ParameterValue": "$(account)"
+  },
+  {
+    "ParameterKey": "accountCloudfront",
+    "ParameterValue": "$(accountCloudfront)"
+  },
+  {
+    "ParameterKey": "distributionId",
+    "ParameterValue": "$(distributionId)"
+  },
+  {
+    "ParameterKey": "cfBucketNameCode",
+    "ParameterValue": "$(cfBucketNameCode)"
+  }
+]

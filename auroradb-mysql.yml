@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation Template for create an Aurora MySQL DB.
+Parameters:
+  stage:
+    Type: String
+    Default: prd
+    AllowedValues:
+      - prd
+      - qa
+      - dev
+  project:
+    Type: String
+  vpcId:
+    Type: String
+  account:
+    Type: String
+  dbSubnetsIdList:
+    Type: CommaDelimitedList
+  dbName:
+    Type: String
+  DBClusterIdentifier:
+    Type: String
+  DBEngine:
+    Type: String
+    AllowedValues:
+      - aurora-mysql
+      - aurora-postgresql
+      - mysql
+      - postgres
+  vpcId:
+    Type: String
+  dbPort:
+    Type: Number
+    Description: Database port
+    Default: 3407
+  rdsInstanceType:
+    Type: String
+    Description: Clase (size) de la base de datos
+    Default: db.t3.large
+    AllowedValues:
+      - db.t3.small
+      - db.t3.medium
+      - db.t3.large
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.12xlarge
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+  dbCredentialsSecretARN:
+    Type: String
+Resources:
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnet group for Aurora Cluster
+      DBSubnetGroupName: !Sub 'ause1-sng-${account}-${project}'
+      SubnetIds: !Ref dbSubnetsIdList
+      Tags:
+        - Key: Name
+          Value: !Sub 'ause1-sng-${account}-${project}'
+  DBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Aurora mysql security group
+      GroupName: !Sub 'ause1-secg-${account}-${project}'
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: '-1'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref dbPort
+          ToPort: !Ref dbPort
+          CidrIp: 10.215.80.0/24
+      VpcId: !Ref vpcId
+      Tags:
+        - Key: Name
+          Value: !Sub 'ause1-secg-${account}-${project}'
+  AuroraMySQLCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      BackupRetentionPeriod: 35
+      DatabaseName: !Ref dbName
+      DBClusterIdentifier: !Ref DBClusterIdentifier
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      EnableCloudwatchLogsExports:
+        - audit
+        - error
+        - general
+        - slowquery
+      EnableHttpEndpoint: true
+      Engine: !Ref DBEngine
+      EngineMode: provisioned
+      MasterUsername:
+        Fn::Join:
+          - ''
+          - - '{{resolve:secretsmanager:'
+            - Ref: dbCredentialsSecretARN
+            - ':SecretString:username}}'
+      MasterUserPassword:
+        Fn::Join:
+          - ''
+          - - '{{resolve:secretsmanager:'
+            - Ref: dbCredentialsSecretARN
+            - ':SecretString:password}}'
+      Port: !Ref dbPort
+      StorageEncrypted: true
+      VpcSecurityGroupIds:
+        - !GetAtt 
+          - DBSecurityGroup
+          - GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub 'ause1-db-${account}-${project}'
+  AuroraMySQLInstance01:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBClusterIdentifier: !Ref AuroraMySQLCluster
+      DBInstanceIdentifier: !Sub 'ause1-rds-${account}-${project}-01'
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBInstanceClass: !Ref rdsInstanceType
+      Engine: !Ref DBEngine
+      LicenseModel: general-public-license
+      PubliclyAccessible: 'false'
+  AuroraMySQLInstance02:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBClusterIdentifier: !Ref AuroraMySQLCluster
+      DBInstanceIdentifier: !Sub 'ause1-rds-${account}-${project}-02'
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBInstanceClass: !Ref rdsInstanceType
+      Engine: !Ref DBEngine
+      LicenseModel: general-public-license
+      PubliclyAccessible: 'false'
+  SecretAuroraAttachment:
+    Type: 'AWS::SecretsManager::SecretTargetAttachment'
+    Properties:
+      SecretId: !Ref dbCredentialsSecretARN
+      TargetId: !Ref AuroraMySQLCluster
+      TargetType: 'AWS::RDS::DBCluster'
+Outputs:
+  DBClusterWriteEndpoint:
+    Description: DB Cluster Write Endpoint
+    Value: !GetAtt AuroraMySQLCluster.Endpoint.Address
+  DBClusterReadEndpoint:
+    Description: DB Cluster Read Endpoint
+    Value: !GetAtt AuroraMySQLCluster.ReadEndpoint.Address
+  DBClusterPort:
+    Description: DB Cluster Port
+    Value: !GetAtt AuroraMySQLCluster.Endpoint.Port
+  DBClusterArn:
+    Value: !GetAtt AuroraMySQLCluster.DBClusterArn
+  DBClusterIdentifier:
+    Value:
+      Ref: DBClusterIdentifier
+  dbName:
+    Value:
+      Ref: dbName
+  DBEngine:
+    Value:
+      Ref: DBEngine
+  dbPort:
+    Value:
+      Ref: dbPort
+  DBClusterSg:
+    Value: !GetAtt DBSecurityGroup.GroupId
